@@ -49,7 +49,7 @@ function shellQuote(value: string): string {
 
 function renderString(value: string, replacements: Record<string, string>): string {
   return Object.entries(replacements).reduce(
-    (result, [key, replacement]) => result.replaceAll(`{${key}}`, replacement),
+    (result, [key, replacement]) => result.replaceAll(`{${key}}`, () => replacement),
     value,
   );
 }

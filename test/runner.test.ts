@@ -186,8 +186,14 @@ test("replay relocation preserves shell quoting through apostrophes", () => {
     toolName: "Bash",
     toolInput: { command: `cat '/tmp/it'"'"'s/secret'` },
   };
-  const relocated = relocateSpecForReplay(spec, "/tmp/it's", "/var/new'root");
-  assert.equal(relocated.toolInput.command, `cat '/var/new'"'"'root/secret'`);
+  const relocated = relocateSpecForReplay(spec, "/tmp/it's", "/var/new'root/$&/$$");
+  assert.equal(relocated.toolInput.command, `cat '/var/new'"'"'root/$&/$$/secret'`);
+  const native = relocateSpecForReplay(
+    { ...spec, toolName: "Read", toolInput: { file_path: "/tmp/it's/secret" } },
+    "/tmp/it's",
+    "/tmp/$&/replay",
+  );
+  assert.equal(native.toolInput.file_path, "/tmp/$&/replay/secret");
 });
 
 test("duplicate attempt IDs are rejected before they can overwrite evidence", async (t) => {

@@ -32,7 +32,7 @@ function safeId(id: string): string {
 }
 
 function relocateValue(value: unknown, oldRoot: string, newRoot: string): unknown {
-  if (typeof value === "string") return value.replaceAll(oldRoot, newRoot);
+  if (typeof value === "string") return value.replaceAll(oldRoot, () => newRoot);
   if (Array.isArray(value)) return value.map((item) => relocateValue(item, oldRoot, newRoot));
   if (typeof value === "object" && value !== null) {
     return Object.fromEntries(
@@ -54,7 +54,7 @@ export function relocateSpecForReplay(spec: AttemptSpec, oldRoot: string, newRoo
         ...spec.toolInput,
         command: spec.toolInput.command.replaceAll(
           shellSingleQuoteEscape(oldRoot),
-          shellSingleQuoteEscape(newRoot),
+          () => shellSingleQuoteEscape(newRoot),
         ),
       },
     };

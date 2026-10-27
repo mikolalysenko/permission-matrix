@@ -64,6 +64,14 @@ test("shell templates quote apostrophes", () => {
   assert.equal(deny[1], `Bash(cat '/tmp/it'"'"'s/secret')`);
 });
 
+test("path placeholders treat JavaScript replacement patterns literally", () => {
+  const paths = { root: "/tmp/$&/root", secret: "/tmp/$&/root/secret", protected: "/tmp/$&/root/protected", repository: "/tmp/$&/root/repo" };
+  const resolved = resolveForWorkspace(config, paths);
+  assert.deepEqual(resolved.filesystemMcp.args, ["server", "/tmp/$&/root"]);
+  const deny = (resolved.settings.permissions as { deny: string[] }).deny;
+  assert.equal(deny[0], "Read(///tmp/$&/root/secret)");
+});
+
 test("invalid configurations are rejected", () => {
   assert.throws(() => validateConfig(null), /JSON object/);
   assert.throws(() => validateConfig({ schemaVersion: 2 }), /schemaVersion/);
