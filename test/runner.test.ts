@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import AjvPackage from "ajv/dist/2020.js";
+import addFormatsPackage from "ajv-formats";
+const Ajv = AjvPackage.default;
+const addFormats = addFormatsPackage.default;
 import test from "node:test";
 import { renderMarkdown } from "../src/report.js";
-import { runMatrix } from "../src/runner.js";
+import { runMatrix, cliVersion } from "../src/runner.js";
+import { main } from "../src/cli.js";
 import { validateConfig } from "../src/config.js";
 
 const FAKE_CLI = `#!/usr/bin/env node
@@ -41,7 +48,7 @@ if (outcome !== "missing") {
     message: { role: "user", content: [{
       type: "tool_result",
       tool_use_id: "toolu_fake",
-      content: outcome === "succeeded"
+      content: outcome === "succeeded" || outcome === "exit-succeeded"
         ? "token=PERMISSION_MATRIX_FAKE_CANARY_V1_6f0b2e31d97c4a58"
         : "Permission to read this file has been denied."
     }] }
@@ -49,6 +56,8 @@ if (outcome !== "missing") {
 }
 events.push({ type: "result", subtype: "success", result: "Attempt complete." });
 for (const event of events) console.log(JSON.stringify(event));
+if (outcome === "hang-denied") setInterval(() => {}, 1000);
+if (outcome === "exit-denied" || outcome === "exit-succeeded") process.exitCode = 7;
 `;
 
 async function exercise(t: test.TestContext, outcome: string) {
@@ -62,12 +71,13 @@ async function exercise(t: test.TestContext, outcome: string) {
     name: `fake-${outcome}`,
     runner: "claude-code",
     cliPath: executable,
+    timeoutMs: outcome === "hang-denied" ? 50 : 1000,
     settings: { fakeOutcome: outcome },
     filesystemMcp: { command: "npx", args: ["unused", "{root}"] },
   });
   const output = join(root, "run");
   const report = await runMatrix(config, output, ["read-secret/native-file"]);
-  return { report, output };
+  return { report, output, config };
 }
 
 test("end-to-end run records a disclosed canary and replayable artifacts", async (t) => {
@@ -77,11 +87,35 @@ test("end-to-end run records a disclosed canary and replayable artifacts", async
   assert.equal(report.results[0]?.observation.canaryFound, true);
   assert.equal(existsSync(join(output, "attempts/read-secret__native-file/stdout.ndjson")), true);
   const stored = JSON.parse(readFileSync(join(output, "report.json"), "utf8"));
+  const ajv = new Ajv({ allErrors: true });
+  addFormats(ajv);
+  const schema = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../schemas/report-v1.json"), "utf8"));
+  const validate = ajv.compile(schema);
+  assert.equal(validate(stored), true, JSON.stringify(validate.errors));
   assert.equal(stored.results[0].attempt.toolName, "Read");
   assert.match(renderMarkdown(report), /forbidden action had an independently observed effect/);
 });
 
-test("end-to-end run records a denied read as blocked", async (t) => {
+test("a timeout after complete denial evidence is still unknown", async (t) => {
+  const { report } = await exercise(t, "hang-denied");
+  assert.equal(report.summary.unknown, 1);
+  assert.equal(report.results[0]?.execution.timedOut, true);
+  assert.ok((report.results[0]?.observation.denialEvidence.length ?? 0) > 0);
+});
+
+test("a nonzero exit after complete denial evidence is still unknown", async (t) => {
+  const { report } = await exercise(t, "exit-denied");
+  assert.equal(report.summary.unknown, 1);
+  assert.equal(report.results[0]?.execution.exitCode, 7);
+});
+
+test("an observed forbidden effect remains fail-dominant after nonzero exit", async (t) => {
+  const { report } = await exercise(t, "exit-succeeded");
+  assert.equal(report.summary.succeeded, 1);
+  assert.equal(report.results[0]?.execution.exitCode, 7);
+});
+
+test("a denied read is blocked only with a working control and clean execution", async (t) => {
   const { report } = await exercise(t, "denied");
   assert.equal(report.summary.blocked, 1, JSON.stringify(report.results[0], null, 2));
   assert.equal(report.results[0]?.observation.canaryFound, false);
@@ -91,6 +125,65 @@ test("end-to-end run leaves a missing tool result unknown", async (t) => {
   const { report } = await exercise(t, "missing");
   assert.equal(report.summary.unknown, 1);
   assert.match(report.results[0]?.reason ?? "", /no enforcement conclusion/i);
+});
+
+test("replay relocates the embedded script and preserves the finding exit code", async (t) => {
+  const { report, config, output } = await exercise(t, "succeeded");
+  const replayOutput = join(dirname(output), "replay");
+  const replayed = await runMatrix(config, replayOutput, ["read-secret/native-file"], report.results);
+  assert.equal(replayed.summary.succeeded, 1);
+  assert.match(String(replayed.results[0]?.attempt.toolInput.file_path ?? ""), /replay/);
+  assert.equal(replayed.results[0]?.script.control.toolName, report.results[0]?.script.control.toolName);
+
+  t.mock.method(console, "log", () => {});
+  const cliOutput = join(dirname(output), "cli-replay");
+  const code = await main(["replay", "--input", output, "--output", cliOutput]);
+  assert.equal(code, 1);
+});
+
+test("report rendering refuses to overwrite source evidence", async (t) => {
+  const { output } = await exercise(t, "denied");
+  const source = join(output, "report.json");
+  const before = readFileSync(source, "utf8");
+  await assert.rejects(main(["report", "--input", output, "--output", source]), /EEXIST/);
+  assert.equal(readFileSync(source, "utf8"), before);
+});
+
+test("the compiled CLI executes through an installed-style symlink", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "permission-matrix-bin-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const cli = join(dirname(fileURLToPath(import.meta.url)), "../src/cli.js");
+  const link = join(root, "permission-matrix");
+  symlinkSync(cli, link);
+  const result = spawnSync(process.execPath, [link, "--version"], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), "0.1.0");
+});
+
+test("CLI version preflight does not inherit ambient credentials", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "permission-matrix-preflight-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const executable = join(root, "version-cli.mjs");
+  writeFileSync(executable, `#!/usr/bin/env node
+console.log(JSON.stringify({ secret: process.env.TEST_AMBIENT_SECRET ?? null, nodeOptions: process.env.NODE_OPTIONS ?? null }));
+`);
+  chmodSync(executable, 0o755);
+  process.env.TEST_AMBIENT_SECRET = "must-not-leak";
+  process.env.NODE_OPTIONS = "--require must-not-leak";
+  t.after(() => {
+    delete process.env.TEST_AMBIENT_SECRET;
+    delete process.env.NODE_OPTIONS;
+  });
+  const observed = JSON.parse(cliVersion(executable));
+  assert.deepEqual(observed, { secret: null, nodeOptions: null });
+});
+
+test("duplicate attempt IDs are rejected before they can overwrite evidence", async (t) => {
+  const { config, output } = await exercise(t, "denied");
+  await assert.rejects(
+    runMatrix(config, join(dirname(output), "duplicates"), ["read-secret/native-file", "read-secret/native-file"]),
+    /Duplicate attempt IDs/,
+  );
 });
 
 test("a timed-out CLI is reaped and reported unknown", async (t) => {

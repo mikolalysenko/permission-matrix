@@ -17,4 +17,4 @@ All notable changes are documented here. This project follows semantic versionin
 ### Compatibility
 
 - Tested locally with Claude Code 2.1.312 and `@modelcontextprotocol/server-filesystem` 2.0.1 on macOS arm64.
-- [GitHub Actions Ubuntu integration](https://github.com/mikolalysenko/permission-matrix/actions/runs/40602318321) passed with four blocked, two succeeded, and zero unknown cells.
+- [GitHub Actions Ubuntu integration](https://github.com/mikolalysenko/permission-matrix/actions/workflows/ci.yml) passed with four blocked, two succeeded, and zero unknown cells.

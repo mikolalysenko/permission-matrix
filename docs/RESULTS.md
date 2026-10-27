@@ -21,10 +21,11 @@ results[]             # one record per selected cell
 Each result includes:
 
 - `attempt`: stable ID, invariant, execution path, exact tool name and input;
+- `script`: embedded preparation, control, and forbidden calls used for replay;
 - `outcome` and a human-readable `reason`;
 - `observation`: canary result, protected-file before/after SHA-256, final-change result, denial evidence, positive-control status and evidence;
 - `execution`: exact argv, cwd, allowlisted environment, exit code/signal, timeout state, duration, resolved settings and MCP config, mock request sequencing, and spawn error when present;
-- `artifacts`: report-relative evidence paths and the synthetic workspace path.
+- `artifacts`: report-relative evidence paths and the absolute path of the synthetic workspace.
 
 Reports include fake canaries by design. Do not adapt the fixtures to real credentials and then publish the reports.
 
@@ -55,7 +56,7 @@ node dist/src/cli.js replay \
   --attempt read-secret/native-file
 ```
 
-The output directory must not already exist. Fixtures, absolute paths, isolated configuration, and the mock endpoint are regenerated. The original response script and suite policy are preserved logically, not by reusing modified files.
+The output directory must not already exist. Fixtures and absolute paths are relocated into fresh workspaces, while the report's embedded preparation, control, and forbidden response script is preserved rather than regenerated from the currently installed scenario code. The original suite policy and isolated configuration are regenerated from the recorded config.
 
 Replay does not certify artifact integrity or an identical environment. Compare `environment.cliVersion`, platform, architecture, and the pinned MCP package before treating outcomes as a reproduction. A version or platform change is a new experiment.
 

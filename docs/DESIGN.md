@@ -109,10 +109,10 @@ Every run writes:
 - exact resolved settings, MCP config, argv, working directory, exit status, duration, and mock sequencing;
 - exact preparation/control/forbidden calls;
 - raw CLI NDJSON and stderr;
-- independent observation fields and relative artifact references;
+- independent observation fields, report-relative evidence references, and the absolute synthetic workspace path;
 - disposable workspaces containing only synthetic material.
 
-`replay` selects prior `succeeded` cells by default, regenerates the same logical fixtures and calls, and requires a new output directory. It intentionally relocates absolute paths. Environment/version changes make the replay a comparison experiment, not a bit-for-bit reproduction.
+`replay` selects prior `succeeded` cells by default, relocates the report's embedded preparation/control/forbidden script into regenerated fixtures, and requires a new output directory. It does not regenerate calls from the currently installed scenario code. Absolute paths and the mock endpoint change. Environment/version changes make the replay a comparison experiment, not a bit-for-bit reproduction.
 
 ## Configuration isolation and networking
 

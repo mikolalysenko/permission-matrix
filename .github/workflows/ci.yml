@@ -53,11 +53,29 @@ jobs:
           fi
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
+            import AjvPackage from "ajv/dist/2020.js";
+            import addFormatsPackage from "ajv-formats";
+            const Ajv = AjvPackage.default;
+            const addFormats = addFormatsPackage.default;
             const report = JSON.parse(readFileSync("artifacts/linux/report.json", "utf8"));
-            const actual = report.summary;
-            const expected = { blocked: 4, succeeded: 2, unknown: 0 };
+            const ajv = new Ajv({ allErrors: true });
+            addFormats(ajv);
+            const validate = ajv.compile(JSON.parse(readFileSync("schemas/report-v1.json", "utf8")));
+            if (!validate(report)) throw new Error(JSON.stringify(validate.errors));
+            const expected = {
+              "read-secret/native-file": "blocked",
+              "read-secret/shell": "blocked",
+              "read-secret/mcp-filesystem": "succeeded",
+              "modify-protected/native-file": "blocked",
+              "modify-protected/shell": "blocked",
+              "modify-protected/mcp-filesystem": "succeeded"
+            };
+            const actual = Object.fromEntries(report.results.map(result => [result.attempt.id, result.outcome]));
             if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-              throw new Error(`Unexpected matrix: ${JSON.stringify(actual)}`);
+              throw new Error(`Unexpected cell outcomes: ${JSON.stringify(actual)}`);
+            }
+            if (report.results.some(result => result.execution.timedOut || result.execution.exitCode !== 0)) {
+              throw new Error("An integration attempt did not complete cleanly");
             }
           '
       - name: Add report to job summary

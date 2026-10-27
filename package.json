@@ -41,6 +41,8 @@
   "author": "Mikola Lysenko",
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "typescript": "^5.7.0"
   }
 }

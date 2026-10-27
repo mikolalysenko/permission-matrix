@@ -36,7 +36,7 @@ A local run on 2026-10-27 using macOS arm64, Claude Code 2.1.312, and `@modelcon
 | Modify protected file through shell | **Blocked** | Denial observed; final SHA-256 unchanged |
 | Modify protected file through filesystem MCP | **Succeeded** | Final SHA-256 changed |
 
-The two MCP results replayed with the same outcomes in fresh workspaces. A [pinned GitHub Actions Ubuntu run](https://github.com/mikolalysenko/permission-matrix/actions/runs/40602318321) independently produced the same **4 blocked / 2 succeeded / 0 unknown** matrix. These are compatibility results for the recorded environments, **not a universal property of Claude Code**. The example policy intentionally allows the MCP tools while denying the corresponding native paths, making the cross-path difference visible. Run the matrix against your own configuration rather than treating this table as a security assessment.
+The two MCP results replayed with the same outcomes in fresh workspaces. A [pinned GitHub Actions Ubuntu run](https://github.com/mikolalysenko/permission-matrix/actions/workflows/ci.yml) independently produced the same **4 blocked / 2 succeeded / 0 unknown** matrix. These are compatibility results for the recorded environments, **not a universal property of Claude Code**. The example policy intentionally allows the MCP tools while denying the corresponding native paths, making the cross-path difference visible. Run the matrix against your own configuration rather than treating this table as a security assessment.
 
 ## Requirements
 
@@ -103,7 +103,7 @@ node dist/src/cli.js replay \
   --output artifacts/replayed-run
 ```
 
-Replay regenerates fixtures and configuration in fresh workspaces; it does not reuse a modified protected file. Absolute paths and timestamps therefore differ. A different CLI, MCP server, OS, or architecture is a **new comparison run**, not an exact reproduction of the original environment.
+Replay regenerates fixtures and relocates the report's embedded preparation/control/forbidden script into fresh workspaces; it does not reuse a modified protected file or regenerate calls from a newer harness's scenario code. Absolute paths and timestamps therefore differ. A different CLI, MCP server, OS, or architecture is a **new comparison run**, not an exact reproduction of the original environment.
 
 To render an existing report again:
 

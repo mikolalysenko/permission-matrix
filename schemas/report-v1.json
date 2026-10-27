@@ -40,7 +40,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["attempt", "outcome", "reason", "observation", "execution", "artifacts"],
+        "required": ["attempt", "script", "outcome", "reason", "observation", "execution", "artifacts"],
         "properties": {
           "attempt": {
             "type": "object",
@@ -51,6 +51,14 @@
               "path": { "enum": ["native-file", "shell", "mcp-filesystem"] },
               "toolName": { "type": "string" },
               "toolInput": { "type": "object" }
+            }
+          },
+          "script": {
+            "type": "object",
+            "required": ["preparations", "control"],
+            "properties": {
+              "preparations": { "type": "array", "items": { "$ref": "#/properties/results/items/properties/attempt" } },
+              "control": { "$ref": "#/properties/results/items/properties/attempt" }
             }
           },
           "outcome": { "enum": ["blocked", "succeeded", "unknown"] },
@@ -81,7 +89,18 @@
               "durationMs": { "type": "integer", "minimum": 0 },
               "settings": { "type": "object" },
               "mcpConfig": { "type": "object" },
-              "mockApiRequests": { "type": "array" },
+              "mockApiRequests": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["sequence", "toolResultCount", "served"],
+                  "properties": {
+                    "sequence": { "type": "integer", "minimum": 1 },
+                    "toolResultCount": { "type": "integer", "minimum": 0 },
+                    "served": { "enum": ["preparation", "control", "forbidden", "final"] }
+                  }
+                }
+              },
               "error": { "type": "string" }
             }
           },

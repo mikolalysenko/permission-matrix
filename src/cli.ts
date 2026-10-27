@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { join, resolve } from "node:path";
 import { loadConfig, validateConfig } from "./config.js";
 import { renderMarkdown } from "./report.js";
@@ -109,7 +110,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   if (command === "report") {
     if (!options.input) throw new Error("report requires --input.");
     const markdown = renderMarkdown(readReport(options.input));
-    if (options.output) writeFileSync(options.output, markdown);
+    if (options.output) writeFileSync(options.output, markdown, { flag: "wx" });
     else console.log(markdown);
     return 0;
   }
@@ -128,7 +129,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
       ? options.attempts
       : previous.results.filter((result) => result.outcome === "succeeded").map((result) => result.attempt.id);
     if (attempts.length === 0) throw new Error("No succeeded attempts to replay; specify --attempt explicitly.");
-    const report = await runMatrix(validateConfig(previous.config), resolve(options.output), attempts);
+    const report = await runMatrix(validateConfig(previous.config), resolve(options.output), attempts, previous.results);
     printCompletion(options.output, report);
     return exitCode(report, options.allowUnknown);
   }
@@ -136,7 +137,9 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   throw new Error(`Unknown command: ${command}\n\n${USAGE}`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const invokedAsScript = process.argv[1] !== undefined &&
+  realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedAsScript) {
   main().then(
     (code) => { process.exitCode = code; },
     (error: unknown) => {

@@ -11,6 +11,11 @@ export interface AttemptSpec {
   toolInput: JsonObject;
 }
 
+export interface AttemptScript {
+  preparations: AttemptSpec[];
+  control: AttemptSpec;
+}
+
 export interface Observation {
   canaryFound: boolean | null;
   protectedSha256Before: string | null;
@@ -37,6 +42,7 @@ export interface ExecutionRecord {
 
 export interface AttemptResult {
   attempt: AttemptSpec;
+  script: AttemptScript;
   outcome: Outcome;
   reason: string;
   observation: Observation;

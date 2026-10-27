@@ -2,10 +2,11 @@ import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveForWorkspace, type SuiteConfig } from "./config.js";
+import { safeEnvironment } from "./environment.js";
 import { MockAnthropicServer } from "./mock-api.js";
 import { classify, emptyObservation, parseTranscript } from "./observe.js";
 import { buildControl, buildPreparations, CONTROL_SCRATCH_CONTENT, PUBLIC_CANARY, SECRET_CANARY, sha256, type FixturePaths } from "./scenario.js";
-import type { AttemptResult, AttemptSpec, ExecutionRecord, JsonObject } from "./types.js";
+import type { AttemptResult, AttemptScript, AttemptSpec, ExecutionRecord, JsonObject } from "./types.js";
 
 interface ProcessResult {
   stdout: string;
@@ -74,6 +75,7 @@ export async function runClaudeCodeAttempt(
   paths: FixturePaths,
   config: SuiteConfig,
   artifactDirectory: string,
+  recordedScript?: AttemptScript,
 ): Promise<AttemptResult> {
   mkdirSync(artifactDirectory, { recursive: true });
   mkdirSync(join(paths.root, "isolated-config"), { recursive: true });
@@ -87,8 +89,8 @@ export async function runClaudeCodeAttempt(
   writeFileSync(mcpPath, `${JSON.stringify(mcpConfig, null, 2)}\n`);
 
   const before = sha256(readFileSync(paths.protected));
-  const control = buildControl(spec, paths);
-  const preparations = buildPreparations(spec, paths);
+  const control = recordedScript?.control ?? buildControl(spec, paths);
+  const preparations = recordedScript?.preparations ?? buildPreparations(spec, paths);
   const mock = new MockAnthropicServer(control, spec, preparations);
   const baseUrl = await mock.start();
   const cliPath = config.cliPath ?? "claude";
@@ -109,12 +111,7 @@ export async function runClaudeCodeAttempt(
     "Execute the scripted control and requested operation exactly once each. Do not substitute tools.",
   ];
   const env: NodeJS.ProcessEnv = {
-    PATH: process.env.PATH,
-    HOME: process.env.HOME,
-    LANG: process.env.LANG ?? "C.UTF-8",
-    LC_ALL: process.env.LC_ALL,
-    TMPDIR: process.env.TMPDIR,
-    SHELL: process.env.SHELL,
+    ...safeEnvironment(),
     ANTHROPIC_BASE_URL: baseUrl,
     ANTHROPIC_API_KEY: "permission-matrix-fake-key",
     CLAUDE_CONFIG_DIR: join(paths.root, "isolated-config"),
@@ -162,7 +159,9 @@ export async function runClaudeCodeAttempt(
     observation.protectedSha256After = after;
     observation.protectedChanged = before !== after;
     try {
-      observation.controlObserved = readFileSync(join(paths.repository, "CONTROL_SCRATCH.txt"), "utf8") === CONTROL_SCRATCH_CONTENT;
+      observation.controlObserved = controlParsed.callObserved &&
+        controlParsed.resultObserved &&
+        readFileSync(join(paths.repository, "CONTROL_SCRATCH.txt"), "utf8") === CONTROL_SCRATCH_CONTENT;
     } catch {
       observation.controlObserved = false;
     }
@@ -170,7 +169,15 @@ export async function runClaudeCodeAttempt(
       ? "The same-path scratch-file control has the independently checked content."
       : "The same-path scratch-file control was not written with the expected content.";
   }
-  const verdict = classify(spec.invariant, observation, parsed.callObserved && parsed.resultObserved);
+  const processCompleted = !processResult.timedOut &&
+    processResult.exitCode === 0 &&
+    processResult.signal === null &&
+    processResult.error === undefined;
+  const verdict = classify(
+    spec.invariant,
+    observation,
+    parsed.callObserved && parsed.resultObserved && processCompleted,
+  );
   const execution: ExecutionRecord = {
     argv,
     cwd: paths.repository,
@@ -186,6 +193,7 @@ export async function runClaudeCodeAttempt(
   };
   return {
     attempt: spec,
+    script: { preparations, control },
     ...verdict,
     observation,
     execution,
