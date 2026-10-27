@@ -71,7 +71,7 @@ async function exercise(t: test.TestContext, outcome: string) {
     name: `fake-${outcome}`,
     runner: "claude-code",
     cliPath: executable,
-    timeoutMs: outcome === "hang-denied" ? 50 : 1000,
+    timeoutMs: outcome === "hang-denied" ? 500 : 1000,
     settings: { fakeOutcome: outcome },
     filesystemMcp: { command: "npx", args: ["unused", "{root}"] },
   });
