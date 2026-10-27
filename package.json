@@ -1,0 +1,46 @@
+{
+  "name": "permission-matrix",
+  "version": "0.1.0",
+  "description": "Test one intended coding-agent restriction across native tools, shell commands, and MCP.",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "permission-matrix": "dist/src/cli.js"
+  },
+  "exports": "./dist/src/index.js",
+  "files": [
+    "dist/src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "test:watch": "tsc -p tsconfig.json && node --test --watch dist/test/*.test.js",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mikolalysenko/permission-matrix.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mikolalysenko/permission-matrix/issues"
+  },
+  "keywords": [
+    "agents",
+    "security",
+    "permissions",
+    "mcp",
+    "testing"
+  ],
+  "license": "MIT",
+  "author": "Mikola Lysenko",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Unit / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+
+  linux-integration:
+    name: Real Claude Code / Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm install -g @anthropic-ai/claude-code@2.1.312 @modelcontextprotocol/server-filesystem@2.0.1
+      - run: npm run build
+      - run: node dist/src/cli.js validate --config examples/claude-code.json
+      - name: Run the six-cell matrix and check its expected findings
+        shell: bash
+        run: |
+          set +e
+          node dist/src/cli.js run --config examples/claude-code.json --output artifacts/linux
+          status=$?
+          set -e
+          if [ "$status" -ne 1 ]; then
+            echo "Expected exit 1 (two example MCP findings), got $status"
+            exit 1
+          fi
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync("artifacts/linux/report.json", "utf8"));
+            const actual = report.summary;
+            const expected = { blocked: 4, succeeded: 2, unknown: 0 };
+            if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+              throw new Error(`Unexpected matrix: ${JSON.stringify(actual)}`);
+            }
+          '
+      - name: Add report to job summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f artifacts/linux/report.md ]; then
+            cat artifacts/linux/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-permission-matrix
+          path: artifacts/linux/
+          if-no-files-found: warn
+          retention-days: 14

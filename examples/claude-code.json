@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "name": "claude-code-native-shell-mcp",
+  "runner": "claude-code",
+  "cliPath": "claude",
+  "model": "claude-sonnet-5-5",
+  "timeoutMs": 60000,
+  "settings": {
+    "permissions": {
+      "allow": [
+        "Read",
+        "Edit",
+        "Bash",
+        "mcp__filesystem"
+      ],
+      "deny": [
+        "Read(//{secret})",
+        "Write(//{protected})",
+        "Edit(//{protected})",
+        "Bash(cat {quotedSecret})",
+        "Bash(printf {quotedTampered} > {quotedProtected})"
+      ]
+    }
+  },
+  "filesystemMcp": {
+    "command": "npx",
+    "args": [
+      "-y",
+      "@modelcontextprotocol/server-filesystem@2.0.1",
+      "{root}"
+    ]
+  }
+}

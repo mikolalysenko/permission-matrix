@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mikolalysenko/permission-matrix/schemas/report-v1.json",
+  "title": "Permission Matrix run report",
+  "type": "object",
+  "required": ["schemaVersion", "tool", "createdAt", "config", "environment", "summary", "results"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "permission-matrix" },
+        "version": { "type": "string" }
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "config": { "type": "object" },
+    "environment": {
+      "type": "object",
+      "required": ["platform", "arch", "node", "runner", "cliVersion"],
+      "properties": {
+        "platform": { "type": "string" },
+        "arch": { "type": "string" },
+        "node": { "type": "string" },
+        "runner": { "const": "claude-code" },
+        "cliVersion": { "type": "string" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["blocked", "succeeded", "unknown"],
+      "properties": {
+        "blocked": { "type": "integer", "minimum": 0 },
+        "succeeded": { "type": "integer", "minimum": 0 },
+        "unknown": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["attempt", "outcome", "reason", "observation", "execution", "artifacts"],
+        "properties": {
+          "attempt": {
+            "type": "object",
+            "required": ["id", "invariant", "path", "toolName", "toolInput"],
+            "properties": {
+              "id": { "type": "string" },
+              "invariant": { "enum": ["read-secret", "modify-protected"] },
+              "path": { "enum": ["native-file", "shell", "mcp-filesystem"] },
+              "toolName": { "type": "string" },
+              "toolInput": { "type": "object" }
+            }
+          },
+          "outcome": { "enum": ["blocked", "succeeded", "unknown"] },
+          "reason": { "type": "string" },
+          "observation": {
+            "type": "object",
+            "required": ["canaryFound", "protectedSha256Before", "protectedSha256After", "protectedChanged", "denialEvidence", "controlObserved", "controlEvidence"],
+            "properties": {
+              "canaryFound": { "type": ["boolean", "null"] },
+              "protectedSha256Before": { "type": ["string", "null"] },
+              "protectedSha256After": { "type": ["string", "null"] },
+              "protectedChanged": { "type": ["boolean", "null"] },
+              "denialEvidence": { "type": "array", "items": { "type": "string" } },
+              "controlObserved": { "type": "boolean" },
+              "controlEvidence": { "type": "string" }
+            }
+          },
+          "execution": {
+            "type": "object",
+            "required": ["argv", "cwd", "environment", "exitCode", "signal", "timedOut", "durationMs", "settings", "mcpConfig", "mockApiRequests"],
+            "properties": {
+              "argv": { "type": "array", "items": { "type": "string" } },
+              "cwd": { "type": "string" },
+              "environment": { "type": "object", "additionalProperties": { "type": "string" } },
+              "exitCode": { "type": ["integer", "null"] },
+              "signal": { "type": ["string", "null"] },
+              "timedOut": { "type": "boolean" },
+              "durationMs": { "type": "integer", "minimum": 0 },
+              "settings": { "type": "object" },
+              "mcpConfig": { "type": "object" },
+              "mockApiRequests": { "type": "array" },
+              "error": { "type": "string" }
+            }
+          },
+          "artifacts": { "type": "object", "additionalProperties": { "type": "string" } }
+        }
+      }
+    }
+  }
+}
