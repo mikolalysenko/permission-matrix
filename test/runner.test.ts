@@ -10,7 +10,7 @@ const Ajv = AjvPackage.default;
 const addFormats = addFormatsPackage.default;
 import test from "node:test";
 import { renderMarkdown } from "../src/report.js";
-import { runMatrix, cliVersion } from "../src/runner.js";
+import { runMatrix, cliVersion, relocateSpecForReplay } from "../src/runner.js";
 import { main } from "../src/cli.js";
 import { validateConfig } from "../src/config.js";
 
@@ -176,6 +176,18 @@ console.log(JSON.stringify({ secret: process.env.TEST_AMBIENT_SECRET ?? null, no
   });
   const observed = JSON.parse(cliVersion(executable));
   assert.deepEqual(observed, { secret: null, nodeOptions: null });
+});
+
+test("replay relocation preserves shell quoting through apostrophes", () => {
+  const spec = {
+    id: "read-secret/shell",
+    invariant: "read-secret" as const,
+    path: "shell" as const,
+    toolName: "Bash",
+    toolInput: { command: `cat '/tmp/it'"'"'s/secret'` },
+  };
+  const relocated = relocateSpecForReplay(spec, "/tmp/it's", "/var/new'root");
+  assert.equal(relocated.toolInput.command, `cat '/var/new'"'"'root/secret'`);
 });
 
 test("duplicate attempt IDs are rejected before they can overwrite evidence", async (t) => {

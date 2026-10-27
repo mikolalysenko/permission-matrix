@@ -42,7 +42,23 @@ function relocateValue(value: unknown, oldRoot: string, newRoot: string): unknow
   return value;
 }
 
-function relocateSpec(spec: AttemptSpec, oldRoot: string, newRoot: string): AttemptSpec {
+function shellSingleQuoteEscape(value: string): string {
+  return value.replaceAll("'", `'"'"'`);
+}
+
+export function relocateSpecForReplay(spec: AttemptSpec, oldRoot: string, newRoot: string): AttemptSpec {
+  if (spec.toolName === "Bash" && typeof spec.toolInput.command === "string") {
+    return {
+      ...spec,
+      toolInput: {
+        ...spec.toolInput,
+        command: spec.toolInput.command.replaceAll(
+          shellSingleQuoteEscape(oldRoot),
+          shellSingleQuoteEscape(newRoot),
+        ),
+      },
+    };
+  }
   return { ...spec, toolInput: relocateValue(spec.toolInput, oldRoot, newRoot) as AttemptSpec["toolInput"] };
 }
 
@@ -80,12 +96,12 @@ export async function runMatrix(
     const recorded = recordedResults?.find((candidate) => candidate.attempt.id === id);
     const oldRoot = recorded?.artifacts.workspace;
     const spec = recorded && oldRoot
-      ? relocateSpec(recorded.attempt, oldRoot, workspace)
+      ? relocateSpecForReplay(recorded.attempt, oldRoot, workspace)
       : buildAttempts(paths).find((attempt) => attempt.id === id)!;
     const script: AttemptScript = recorded && oldRoot
       ? {
-          control: relocateSpec(recorded.script.control, oldRoot, workspace),
-          preparations: recorded.script.preparations.map((item) => relocateSpec(item, oldRoot, workspace)),
+          control: relocateSpecForReplay(recorded.script.control, oldRoot, workspace),
+          preparations: recorded.script.preparations.map((item) => relocateSpecForReplay(item, oldRoot, workspace)),
         }
       : { control: buildControl(spec, paths), preparations: buildPreparations(spec, paths) };
     const relativeArtifacts = join("attempts", safeId(id));
