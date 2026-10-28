@@ -19,6 +19,13 @@ Open `report.md` for the matrix. `report.json` records every cell's result and e
 
 ## Coverage
 
+The adapter targets Agent Leases v0.3, including its operator inbox. Requests are
+submitted and polled through each worker interface, both on the host and inside
+the Linux sandbox. The observer verifies that asking grants nothing, approval
+can grant fewer units, denials/questions do not widen access, and a fourth new
+request in an hour is refused. It inspects provider calls after these decisions,
+not just the returned messages.
+
 | Area | Interactions |
 | --- | --- |
 | Useful workflow | Pinned read → fresh branch → draft PR → comment on that PR |
