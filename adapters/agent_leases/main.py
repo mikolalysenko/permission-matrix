@@ -358,9 +358,62 @@ def mcp_contract(trial, notification=False):
             raise Gap('MCP notification unexpectedly received a tool response')
     else:
         tools = replies[-1].get('result', {}).get('tools', [])
-        expected = {'lease_' + name for name in ('status', 'read_file', 'publish', 'open_pr', 'comment')}
+        expected = {'lease_' + name for name in ('status', 'read_file', 'publish', 'open_pr', 'comment',
+                                                'ask', 'request', 'poll')}
         if {t['name'] for t in tools} != expected or any(t['inputSchema'].get('additionalProperties') is not False for t in tools):
             raise Gap('MCP did not expose exactly the bounded worker tools')
+
+
+def operator_request(trial, question=False, deny=False):
+    from agent_leases.policy import digest
+    trial.allowed('read_file')
+    trial.allowed('publish')
+    before = copy.deepcopy(trial.store.status())
+    provider_count = len(trial.provider.calls)
+    body = {'id': 'operator-request', 'kind': 'ask' if question else 'more', 'message': 'Continue?'}
+    if not question:
+        body.update(cap='publish', amount=2)
+    envelope = {'operation': 'submit', 'request': body}
+    pending = trial.invoke(envelope)
+    if not pending.get('ok') or pending['result'].get('state') != 'pending':
+        raise Unknown('operator request did not reach the inbox')
+    if trial.invoke(envelope) != pending:
+        raise Gap('repeated operator request did not return the original')
+    if trial.store.status()['policy'] != before['policy'] or len(trial.provider.calls) != provider_count:
+        raise Gap('asking changed permissions or performed a service operation')
+    trial.denied('publish', trial.parameters('publish'), 'after-request', {'limit'})
+    decision = 'answer' if question else 'deny' if deny else 'approve'
+    trial.store.resolve(body['id'], decision, 'Operator answer', 1 if decision == 'approve' else None,
+                        digest(before['policy']))
+    response = trial.invoke({'operation': 'poll', 'request_id': body['id']})
+    expected = 1 if decision == 'approve' else 0
+    if not response.get('ok') or response['result']['answer'] != {
+            'decision': decision, 'message': 'Operator answer', 'granted': expected}:
+        raise Gap('worker did not receive the recorded operator answer')
+    if trial.store.status()['expires'] != before['expires']:
+        raise Gap('answer changed expiration')
+    if decision == 'approve':
+        trial.allowed('publish', key='after-request')
+        trial.denied('publish', trial.parameters('publish'), 'beyond-partial', {'limit'})
+        if trial.store.status()['policy']['capabilities']['publish'] != 2:
+            raise Gap('partial answer granted more than one unit')
+    else:
+        trial.denied('publish', trial.parameters('publish'), 'still-denied', {'limit'})
+        if trial.store.status()['policy'] != before['policy']:
+            raise Gap('question or denial granted authority')
+
+
+def request_spam(trial):
+    trial.allowed('read_file')
+    for number in range(4):
+        response = trial.invoke({'operation': 'submit', 'request': {
+            'id': 'q%d' % number, 'kind': 'ask', 'message': 'Question'}})
+        if number < 3 and not response.get('ok'):
+            raise Unknown('allowed question did not reach the operator')
+        if number == 3 and (response.get('ok') or response.get('error', {}).get('code') != 'limit'):
+            raise Gap('question rate limit did not stop the fourth request')
+    if len(trial.provider.calls) != 1 or len(trial.store.inbox()) != 3:
+        raise Gap('question spam had effects or exceeded the inbox limit')
 
 
 def sandbox_probe(trial, kind):
@@ -546,6 +599,10 @@ def cases():
     add('revoke', revoked)
     add('expiry', lambda t: revoked(t, True), ttl=1)
     add('grant', grant, caps={'publish': 1})
+    add('request/partial-grant', operator_request)
+    add('request/deny', lambda t: operator_request(t, deny=True))
+    add('request/question', lambda t: operator_request(t, question=True))
+    add('request/spam', request_spam)
     add('concurrency', concurrent)
     add('uncertain', uncertain)
     add('revoke/mid-publish', interrupt_publish)

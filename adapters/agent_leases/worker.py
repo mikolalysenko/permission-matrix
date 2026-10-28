@@ -27,6 +27,15 @@ def command_call(address, request):
     plain = isinstance(params, dict) and set(params) == shapes.get(op)
     if op == 'status' and set(request) == {'operation'}:
         argv += ['status', '--json']
+    elif op == 'submit':
+        body = request['request']
+        if body['kind'] == 'ask':
+            argv += ['ask', body['message']]
+        else:
+            argv += ['request', body['cap'], str(body['amount']), '--reason', body['message']]
+        argv += ['--id', body['id'], '--json']
+    elif op == 'poll':
+        argv += ['wait', request['request_id'], '--poll', '--json']
     elif op == 'read_file' and plain and isinstance(params['path'], str) and not any(0xD800 <= ord(c) <= 0xDFFF for c in params['path']):
         argv += ['read', str(params['path']), '--json']
     elif op == 'publish' and plain and isinstance(params['message'], str) and isinstance(params['files'], dict) and params['files'] and all(
@@ -66,11 +75,20 @@ def mcp_call(address, request):
     if request.get('mcp_messages') is not None:
         messages += request['mcp_messages']
     else:
+        op = request['operation']
         arguments = dict(request.get('params', {}))
+        if op == 'submit':
+            body = request['request']
+            op = 'ask' if body['kind'] == 'ask' else 'request'
+            arguments = {'message': body['message'], 'request_id': body['id']}
+            if op == 'request':
+                arguments.update(cap=body['cap'], amount=body['amount'])
+        elif op == 'poll':
+            arguments = {'id': request['request_id']}
         if 'id' in request:
             arguments['request_id'] = request['id']
         messages.append({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {
-            'name': 'lease_' + request['operation'], 'arguments': arguments}})
+            'name': 'lease_' + op, 'arguments': arguments}})
     argv = [sys.executable, '-m', 'agent_leases', 'mcp', '--socket', address]
     process = subprocess.run(argv, input=''.join(json.dumps(m) + '\n' for m in messages),
                              capture_output=True, text=True, timeout=15)
