@@ -193,3 +193,7 @@ The core has no runtime npm dependencies. TypeScript and Node type declarations 
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Agent Leases
+
+Test the lease gateway through CLI, socket, MCP, and Linux sandbox paths with `permission-matrix leases`. See [the lease adapter](docs/AGENT-LEASES.md) for setup, coverage, and per-cell evidence. No GitHub or model credentials are required.

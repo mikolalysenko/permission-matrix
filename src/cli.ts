@@ -6,6 +6,7 @@ import { loadConfig, validateConfig } from "./config.js";
 import { renderMarkdown } from "./report.js";
 import { cliVersion, runMatrix, VERSION, ATTEMPT_IDS } from "./runner.js";
 import type { RunReport } from "./types.js";
+import { runLeaseMatrix } from "./leases.js";
 
 const USAGE = `Permission Matrix ${VERSION}
 
@@ -16,6 +17,7 @@ Usage:
   permission-matrix replay --input RUN_DIR --output NEW_RUN_DIR [options]
   permission-matrix report --input RUN_DIR [--output REPORT.md]
   permission-matrix validate --config CONFIG.json
+  permission-matrix leases --repo AGENT_LEASES_DIR --output RUN_DIR [--help]
 
 Run/replay options:
   --attempt ID       Run only this attempt (repeatable). Replay defaults to
@@ -94,6 +96,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
     console.log(VERSION);
     return 0;
   }
+  if (command === "leases") return runLeaseMatrix(args.slice(1));
   const options = parseOptions(args.slice(1));
 
   if (command === "validate") {
